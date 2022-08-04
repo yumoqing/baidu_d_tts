@@ -36,7 +36,8 @@ PERS={
 }
 
 class BaiduAudioApi:
-	def __init__(self, lang='zh_CN'):
+	def __init__(self, lang='zh_CN',
+				rate=5, volume=5, pitch=5):
 		self.access_token = None
 		self._auth_()
 		self.cuid = getID()
@@ -69,6 +70,10 @@ class BaiduAudioApi:
 			'lan':'zh',
 			'ctp':1
 		}
+		self.lang = lang
+		self.rate = rate
+		self.pitch = pitch
+		self.volume = volume
 		self.asr_url = 'http://vop.baidu.com/server_api'
 		self.tts_url = 'http://tsn.baidu.com/text2audio'
 
@@ -106,6 +111,27 @@ class BaiduAudioApi:
 		print('x=', x)
 		return x
 
+	def tts_get_rate(self):	
+		return self.tts_params.get('spd')
+
+	def tts_get_pitch(self):
+		return self.tts_params.get('pit')
+
+	def tts_get_voice(self):
+		return self.tts_params.get('per')
+
+	def tts_get_format(self):
+		return self.tts_params.get('aue')
+
+	def tts_get_volume(self):
+		return self.tts_params.get('vol')
+
+	def tts_get_language(self):
+		return self.tts_params.get('lan')
+
+	def tts_set_language(self, lang):
+		self.tts_params['lan'] = lang
+
 	def tts_set_rate(self, rate):
 		if rate < 0 or rate > 15:
 			return 
@@ -124,6 +150,11 @@ class BaiduAudioApi:
 
 		self.tts_params['vol'] = vol
 
+	def tts_set_format(self, fmt=3):
+		if fmt not in [3, 4, 5, 6]:
+			return
+		self.tts_params['aue'] = fmt
+
 	def tts(self, text):
 		tex = quote_plus(text)
 		params = self.tts_params.copy()
@@ -133,13 +164,13 @@ class BaiduAudioApi:
 		ct = x.headers.get('Content-Type')
 		if ct == 'application/json':
 			err = x.json()
+			print(err)
 			return None
 		# 'Content-Type': 'audio/basic;codec=pcm;rate=16000;channel=1'
 		ct_parts = ct.split(';')
 		
 		print('tts resp headers=', x.headers)
 		buf = x.content
-		print('buf=', len(buf))
 		return buf
 
 if __name__ == '__main__':
