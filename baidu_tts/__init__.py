@@ -6,6 +6,7 @@ from .baidu_ai_api import BaiduAudioApi
 from pyttsx3.voice import Voice
 from appPublic.audioplayer import AudioPlayer
 from appPublic.background import Background
+from text2sentences import text_to_sentences
 class NoAppRegisterInfo(Exception):
 	pass
 
@@ -38,6 +39,9 @@ class BaiduTTSDriver:
 		self.player = AudioPlayer(on_stop=self.speak_finish)
 		self.rate = 5
 		self.volume = 1
+		self.sentences = []
+		self.normal_voice = {}
+		self.dialog_voice = {}
 		self.pitch = 5
 		self.language = 'zh'
 		self.format = 3
@@ -49,6 +53,7 @@ class BaiduTTSDriver:
 
 	def backtask(self):
 		print('player back task running ...')
+		self.running = True
 		while self.running:
 			self._pump()
 			time.sleep(0.01)
@@ -57,9 +62,14 @@ class BaiduTTSDriver:
 	
 	def speak_finish(self):
 		print('callback:speak_finish() called')
-		self._proxy.notify('finished-utterance')
+		# self._proxy.notify('finished-utterance')
 		self._proxy.setBusy(False)
-		os.unlink(self.player.source)
+		try:
+			os.unlink(self.player.source)
+		except:
+			if len(self.sentences) < 1:
+				self._proxy.notify('finished-utterance')
+			pass
 		# self._pump()
 
 	def _push(self, cmd):
@@ -68,29 +78,34 @@ class BaiduTTSDriver:
 
 	def _pump(self):
 		if self.player.is_busy():
-			# print('player is busy', self.player.loop,
-			# 		'state=',self.player.state, 
-			# 		'autoplay=', self.player.autoplay)
 			return False
 		if len(self.cmds) < 1:
 			# print('No cmd to do')
 			return False
 
-		c, fn = self.cmds.pop(0)
+		pos, fn = self.cmds.pop(0)
 		self.player.set_source(fn)
 		self.player.play()
 		print('play ...', fn)
-		self._proxy.notify('started-utterance')
+		s = self.sentences[pos]
+		self._proxy.notify('started-sentence', s.start_pos)
 		return True
 
 	def destroy(self):
 		self.player.unload()
+		if self.task:
+			self.running = False
+			self.task.join()
 	
+	def __del__(self):
+		self.destroy()
+
 	def startLoop(self, *args):
 		print('startLoop() called')
 		self._proxy.setBusy(False)
 		self.task = Background(self.backtask)
 		self.task.start()
+		self._proxy.notify('started-utterance')
 
 	def endLoop(self):
 		print('endLoop() called')
@@ -105,23 +120,36 @@ class BaiduTTSDriver:
 		self._proxy.setBusy(False)
 		yield
 	
+	def set_type_voice(self, attrs, sentence):
+		y = self._tts
+		y.tts_set_rate(attrs.get('rate', self.rate))
+		y.tts_set_pitch(attrs.get('pitch', self.pitch))
+		y.tts_set_voice(attrs.get('voice', self.voice))
+
+	def get_audio_file(self, pos, sentence):
+		y = self._tts
+		if sentence.dialog:
+			self.set_type_voice(self.dialog_voice, sentence)
+		else:
+			self.set_type_voice(self.normal_voice, sentence)
+		y.tts_set_format(self.format)
+		y.tts_set_language(sentence.lang)
+		raw = y.tts(sentence.text)
+		if raw is None:
+			print('baidu api error')
+			return
+		mp3file = write_tmp_mp3file(raw)
+		self._push((pos, mp3file))
+		return mp3file
+		
 	def say(self, text):
 		try:
 			self._proxy.setBusy(False)
 			self._completed = True
-			y = self._tts
-			y.tts_set_rate(self.rate)
-			y.tts_set_pitch(self.pitch)
-			y.tts_set_voice(self.voice)
-			y.tts_set_language(self.language)
-			y.tts_set_format(self.format)
-			raw = y.tts(text)
-			if raw is None:
-				print('baidu api error')
-				return
-			mp3file = write_tmp_mp3file(raw)
-			print('gen mp3 file:', mp3file)
-			self._push(('play', mp3file))
+			self.sentences = text_to_sentences(text)
+			for i, s in enumerate(self.sentences):
+				mp3file = self.get_audio_file(i, s)
+
 		except Exception as e:
 			print('error:', e)
 			print_exc()
@@ -132,6 +160,11 @@ class BaiduTTSDriver:
 		self.player.stop()
 
 	def getProperty(self, name):
+		if name == 'normal_voice':
+			return self.normal_voice
+		if name == 'dialog_voice':
+			return self.dialog_voice
+
 		if name == 'voices':
 			return Voices
 
@@ -148,6 +181,10 @@ class BaiduTTSDriver:
 			return self.pitch
 	
 	def setProperty(self, name, value):
+		if name == 'normal_voice':
+			self.normal_voice = value
+		if name == 'dialog_voice':
+			self.dialog_voice = value
 		if name == 'voice':
 			self.voice = value
 		if name == 'rate':
