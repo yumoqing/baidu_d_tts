@@ -144,7 +144,10 @@ class BaiduAudioApi:
 
 		self.tts_params['pit'] = pitch
 
-	def tts_set_voice(self, vol=5):
+	def tts_set_voice(self, voice):
+		self.tts_params['per'] = voice
+
+	def tts_set_volume(self, vol=5):
 		if vol < 0 or vol > 9:
 			return
 
@@ -164,7 +167,7 @@ class BaiduAudioApi:
 		ct = x.headers.get('Content-Type')
 		if ct == 'application/json':
 			err = x.json()
-			print(err)
+			print(params, err)
 			return None
 		# 'Content-Type': 'audio/basic;codec=pcm;rate=16000;channel=1'
 		ct_parts = ct.split(';')

@@ -148,6 +148,7 @@ class BaiduTTSDriver:
 			self._completed = True
 			self.sentences = text_to_sentences(text)
 			for i, s in enumerate(self.sentences):
+				print('s=', s.text, s.lang)
 				mp3file = self.get_audio_file(i, s)
 
 		except Exception as e:
