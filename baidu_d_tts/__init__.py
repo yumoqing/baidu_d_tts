@@ -4,15 +4,21 @@ from traceback import print_exc
 import tempfile
 from .baidu_ai_api import BaiduAudioApi, set_app_info
 from unitts.voice import Voice
+from unitts.basedriver import BaseDriver
 from appPublic.audioplayer import AudioPlayer
 from appPublic.background import Background
 from text2sentences import text_to_sentences
+from .version import __version__
 class NoAppRegisterInfo(Exception):
 	pass
 
 def buildDriver(proxy):
 	return BaiduTTSDriver(proxy)
 
+__ALL__ = [
+	set_app_info,
+	buildDriver
+]
 Voices = [
 	Voice('0', 'duxiaomei', ['zh_CN', 'en_US'], '0', 24),
 	Voice('1', 'duxiaoyu', ['zh_CN', 'en_US'], '1', 24),
@@ -32,9 +38,9 @@ def write_tmp_mp3file(raw):
 
 	return fn
 
-class BaiduTTSDriver:
+class BaiduTTSDriver(BaseDriver):
 	def __init__(self, proxy):
-		self._proxy = proxy
+		super().__init__(proxy)
 		self._tts = BaiduAudioApi()
 		self.player = AudioPlayer(on_stop=self.speak_finish)
 		self.rate = 5
@@ -50,45 +56,7 @@ class BaiduTTSDriver:
 		self._completed = True
 		self.running = True
 		self.task = None
-
-	def backtask(self):
-		print('player back task running ...')
-		self.running = True
-		while self.running:
-			self._pump()
-			time.sleep(0.01)
-		print('player back task end ...')
-
-	
-	def speak_finish(self):
-		print('callback:speak_finish() called, remind sentences:', len(self.sentences))
-		try:
-			os.unlink(self.player.source)
-		except Exception as e:
-			print(str(e))
-
-		self._proxy.notify('finished-sentence')
-
-	def _push(self, cmd):
-		self.cmds.append(cmd)
-
-	def _pump(self):
-		if self.player.is_busy():
-			# print('player is busy')
-			return False
-		if len(self.cmds) < 1:
-			# print('No cmd to do')
-			if self._proxy.isBusy():
-				self._proxy.setBusy(False)
-				self._proxy.notify('finished-utterence')
-			return False
-
-		pos, fn = self.cmds.pop(0)
-		self.player.set_source(fn)
-		self.player.play()
-		print('play ...', fn)
-		self._proxy.notify('started-sentence', pos)
-		return True
+		print(f'BaiduTTSDriver version {__version__}')
 
 	def destroy(self):
 		self.player.unload()
@@ -96,24 +64,13 @@ class BaiduTTSDriver:
 			self.running = False
 			self.task.join()
 	
-	def __del__(self):
-		self.destroy()
+	def pre_command(self, sentence):
+		aufile = self.get_audio_file(sentence)
+		return sentence.start_pos, aufile
 
-	def startLoop(self, *args):
-		print('startLoop() called')
-		self._proxy.setBusy(False)
-		self.task = Background(self.backtask)
-		self.task.start()
-		self._proxy.notify('started-utterance')
-
-	def endLoop(self):
-		print('endLoop() called')
-		self.cmds = []
-		self._proxy.setBusy(False)
-		if self.task:
-			self.running = False
-			self.task.join()
-			self.task = None
+	def command(self, pos, aufile):
+		self.player.set_source(aufile)
+		self.player.play()
 
 	def set_type_voice(self, attrs, sentence):
 		y = self._tts
@@ -134,20 +91,8 @@ class BaiduTTSDriver:
 			print('baidu api error')
 			return
 		mp3file = write_tmp_mp3file(raw)
-		self._push((sentence.start_pos, mp3file))
 		return mp3file
 		
-	def say(self, sentence):
-		try:
-			print('baidu_d_tts driver,say() called')
-			self._proxy.setBusy(False)
-			self._completed = True
-			mp3file = self.get_audio_file(sentence)
-
-		except Exception as e:
-			print('error:', e)
-			print_exc()
-
 	def stop(self):
 		if self._proxy.isBusy():
 			self._completed = False
