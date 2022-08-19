@@ -20,5 +20,9 @@ import unitts
 
 set_app_info(appid, appkey, secret_key)
 tts = unitts.init('baidu_d_tts')
-tts.say('This is a test')
+tts.startLoop()
+while True:
+	x = input()
+	tts.say('This is a test')
+tts.endLoop()
 ```
