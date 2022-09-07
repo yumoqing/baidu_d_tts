@@ -46,8 +46,14 @@ class BaiduTTSDriver(BaseDriver):
 		self.rate = 5
 		self.volume = 1
 		self.sentences = []
-		self.normal_voice = {}
-		self.dialog_voice = {}
+		self.normal_voice = {
+			'voice':"1",
+			"pitch":5
+		}
+		self.dialog_voice = {
+			"voice":"3",
+			"pitch":3
+		}
 		self.pitch = 5
 		self.language = 'zh'
 		self.format = 3
